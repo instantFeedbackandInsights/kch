@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>카톡 전송 마감 양식</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Noto Sans KR', -apple-system, sans-serif;
+        }
+        body {
+            background-color: #f5f5f5;
+            padding: 16px;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 480px;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 20px;
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .row-group {
+            display: flex;
+            gap: 10px;
+        }
+        .row-group .form-group {
+            flex: 1;
+        }
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 6px;
+        }
+        select, input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            outline: none;
+            background-color: #fff;
+        }
+        select:focus, input:focus {
+            border-color: #fee500;
+            box-shadow: 0 0 0 2px rgba(254, 229, 0, 0.5);
+        }
+        .temp-display {
+            padding: 12px;
+            background-color: #eef2f5;
+            border-radius: 8px;
+            font-weight: bold;
+            color: #1a73e8;
+            text-align: center;
+            font-size: 16px;
+        }
+        .preview-box {
+            background: #f9f9f9;
+            border: 1px dashed #bbb;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+            font-size: 15px;
+            color: #333;
+            line-height: 1.6;
+            font-weight: 500;
+        }
+        .preview-title {
+            font-weight: bold;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+        .btn-send {
+            width: 100%;
+            padding: 14px;
+            background-color: #fee500;
+            color: #000000;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn-send:active {
+            background-color: #e6ce00;
+        }
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 12px;
+            position: fixed;
+            z-index: 10;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+        }
+        .toast.show {
+            visibility: visible;
+            animation: fadein 0.3s, fadeout 0.5s 2.5s;
+        }
+        @keyframes fadein {
+            from {bottom: 0; opacity: 0;}
+            to {bottom: 30px; opacity: 1;}
+        }
+        @keyframes fadeout {
+            from {bottom: 30px; opacity: 1;}
+            to {bottom: 0; opacity: 0;}
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>마감 현황 카톡 전송</h2>
+
+    <!-- 층 선택 및 자동 연동 온도 표시 -->
+    <div class="row-group">
+        <div class="form-group">
+            <label for="floorSelect">층 선택</label>
+            <select id="floorSelect" onchange="onFloorChange()">
+                <option value="6층">6층</option>
+                <option value="3층">3층</option>
+                <option value="1층">1층</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>자동 지정 온도</label>
+            <div id="tempDisplay" class="temp-display">상온</div>
+        </div>
+    </div>
+
+    <!-- 회차 선택 (1회차, 2회차만 표시) -->
+    <div class="form-group">
+        <label for="roundSelect">회차 선택</label>
+        <select id="roundSelect" onchange="updatePreview()">
+            <option value="1회차">1회차</option>
+            <option value="2회차">2회차</option>
+        </select>
+    </div>
+
+    <!-- 인계시간 및 분류마감 순서 배치 -->
+    <div class="form-group">
+        <label for="transferTime">인계시간</label>
+        <input type="time" id="transferTime" oninput="updatePreview()">
+    </div>
+
+    <div class="form-group">
+        <label for="sortTime">분류마감 (입력 시 인계시간 자동 -5분)</label>
+        <input type="time" id="sortTime" oninput="onSortTimeInput()">
+    </div>
+
+    <!-- 카톡 전송 메시지 미리보기 -->
+    <div class="preview-title">미리보기</div>
+    <div class="preview-box" id="previewText">입력한 내용이 여기에 표시됩니다.</div>
+
+    <button class="btn-send" onclick="sendKakao()">복사 후 카카오톡 열기</button>
+</div>
+
+<div id="toast" class="toast">문구가 복사되었습니다! 채팅방에 붙여넣어 주세요.</div>
+
+<script>
+    // 층별 온도 매핑 객체
+    const floorTempMap = {
+        '6층': '상온',
+        '3층': '냉동',
+        '1층': '냉장'
+    };
+
+    // 현재 시각 가져오기 (HH:mm)
+    function getCurrentTime() {
+        const now = new Date();
+        return formatTime(now);
+    }
+
+    // Date 객체를 HH:mm 형식 문자열로 변환
+    function formatTime(date) {
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`;
+    }
+
+    // HH:mm 문자열을 Date 객체로 변환 (오늘 날짜 기준)
+    function parseTime(timeStr) {
+        const [hours, minutes] = timeStr.split(':');
+        const date = new Date();
+        date.setHours(parseInt(hours));
+        date.setMinutes(parseInt(minutes));
+        date.setSeconds(0);
+        return date;
+    }
+
+    // 층 변경 시 자동 온도 매핑 처리
+    function onFloorChange() {
+        const selectedFloor = document.getElementById('floorSelect').value;
+        const temp = floorTempMap[selectedFloor] || '';
+        document.getElementById('tempDisplay').innerText = temp;
+        updatePreview();
+    }
+
+    // 분류마감 시간 입력 시 인계시간 자동 계산 (-5분)
+    function onSortTimeInput() {
+        const sortTimeStr = document.getElementById('sortTime').value;
+        if (!sortTimeStr) return;
+
+        const sortTimeDate = parseTime(sortTimeStr);
+        // 5분 차감
+        sortTimeDate.setMinutes(sortTimeDate.getMinutes() - 5);
+        
+        const transferTimeStr = formatTime(sortTimeDate);
+        document.getElementById('transferTime').value = transferTimeStr;
+        
+        updatePreview();
+    }
+
+    // 페이지 접속 초기값 자동 세팅
+    window.onload = function() {
+        const currentTime = getCurrentTime();
+        document.getElementById('sortTime').value = currentTime;
+        
+        const transferTimeDate = parseTime(currentTime);
+        transferTimeDate.setMinutes(transferTimeDate.getMinutes() - 5);
+        document.getElementById('transferTime').value = formatTime(transferTimeDate);
+
+        onFloorChange();
+    };
+
+    // 카톡으로 전송할 문구 조합
+    function buildMessage() {
+        const floor = document.getElementById('floorSelect').value;
+        const temp = floorTempMap[floor];
+        const round = document.getElementById('roundSelect').value;
+        const transferTime = document.getElementById('transferTime').value;
+        const sortTime = document.getElementById('sortTime').value;
+
+        return `${floor} ${temp} ${round} 마감\n인계시간 ${transferTime}\n분류마감 ${sortTime}`;
+    }
+
+    // 미리보기 영역 업데이트
+    function updatePreview() {
+        document.getElementById('previewText').innerText = buildMessage();
+    }
+
+    // 토스트 알림 표시
+    function showToast(msg) {
+        const toast = document.getElementById("toast");
+        toast.innerText = msg;
+        toast.className = "toast show";
+        setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 3000);
+    }
+
+    // 복사 후 카카오톡 실행
+    function sendKakao() {
+        const message = buildMessage();
+
+        // 1. Web Share API 지원 여부 확인 (모바일 브라우저 공유창 열기)
+        if (navigator.share) {
+            navigator.share({
+                text: message
+            }).catch(err => {
+                // 공유 취소 시 또는 실패 시 클립보드 복사 폴백
+                copyAndOpenKakao(message);
+            });
+        } else {
+            copyAndOpenKakao(message);
+        }
+    }
+
+    // 클립보드 복사 후 카카오톡 실행
+    function copyAndOpenKakao(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("문구가 복사되었습니다! 채팅방에 붙여넣어 주세요.");
+                setTimeout(() => {
+                    window.location.href = "kakaotalk://";
+                }, 500);
+            }).catch(() => {
+                fallbackCopyTextToClipboard(text);
+            });
+        } else {
+            fallbackCopyTextToClipboard(text);
+        }
+    }
+
+    // 기존 클립보드 복사 폴백 함수
+    function fallbackCopyTextToClipboard(text) {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showToast("문구가 복사되었습니다! 채팅방에 붙여넣어 주세요.");
+            setTimeout(() => {
+                window.location.href = "kakaotalk://";
+            }, 500);
+        } catch (err) {
+            alert('복사에 실패했습니다. 미리보기 텍스트를 직접 복사해주세요.');
+        }
+        document.body.removeChild(textArea);
+    }
+</script>
+
+</body>
+</html>
