@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HUB 공정별 인원 배치표</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", Roboto, sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Custom Scrollbar for Mobile Touch Smoothness */
+        .table-scroll-container {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Table Rules & Border Mechanics */
+        .excel-table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 900px;
+            table-layout: fixed;
+            background-color: #ffffff;
+            border: 2px solid #000000;
+        }
+
+        .excel-table th, .excel-table td {
+            border: 1px solid #000000;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 13px;
+            height: 32px;
+            padding: 2px 4px;
+            box-sizing: border-box;
+            word-break: break-all;
+        }
+
+        /* Header Color Tokens */
+        .col-cat { width: 65px; font-weight: bold; }
+        .col-job { width: 55px; font-weight: bold; }
+
+        .header-bg { background-color: #f1f5f9; font-weight: bold; font-size: 13px; }
+
+        .bg-yellow { background-color: #fce205 !important; }
+        .bg-green { background-color: #c6efce !important; }
+        .bg-pink { background-color: #fce4d6 !important; }
+        .bg-blue { background-color: #ddebf7 !important; }
+        .bg-light-yellow { background-color: #fff2cc; }
+
+        /* Cell Structural Inputs */
+        .person-cell {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 4px;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+        }
+
+        .person-name {
+            flex: 1;
+            text-align: center;
+            font-weight: 600;
+            font-size: 12px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .time-input-container {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 11px;
+            color: #334155;
+            flex-shrink: 0;
+        }
+
+        .time-input {
+            width: 36px;
+            height: 22px;
+            text-align: right;
+            border: 1px solid #94a3b8;
+            border-radius: 4px;
+            font-size: 11px;
+            padding: 0 3px;
+            box-sizing: border-box;
+            background-color: #ffffff;
+            font-weight: bold;
+        }
+
+        .time-input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+        }
+
+        .unit-label {
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 500;
+            user-select: none;
+        }
+
+        /* Status Toast Alert */
+        #syncToast {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+    </style>
+</head>
+<body class="p-3 sm:p-5">
+
+<div class="max-w-7xl mx-auto space-y-4">
+
+    <!-- Sync Toast Alert -->
+    <div id="syncToast" class="fixed top-3 right-3 z-50 bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-lg shadow-lg opacity-0 pointer-events-none flex items-center gap-2">
+        <span id="syncDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span id="syncMsg">실시간 데이터 동기화 완료</span>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+                <label for="dateSelect" class="text-xs font-bold text-slate-700 whitespace-nowrap">📅 배치표 날짜:</label>
+                <input type="date" id="dateSelect" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="resetAllData()" class="flex-1 sm:flex-initial px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors">
+                    🔄 전체 초기화
+                </button>
+                <button onclick="generateReportText()" class="flex-1 sm:flex-initial px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">
+                    📝 보고 텍스트 생성
+                </button>
+            </div>
+        </div>
+
+        <div>
+            <textarea id="pasteBox" rows="2" class="w-full p-2.5 bg-slate-50 border-2 border-dashed border-blue-400 focus:border-blue-600 rounded-lg text-xs font-mono text-slate-700 transition-all outline-none resize-none" placeholder="[PC 환경] 엑셀 B14:L56 영역 복사(Ctrl+C) 후 여기에 붙여넣기(Ctrl+V)하면 실시간 공유됩니다..."></textarea>
+        </div>
+        <div class="text-[11px] text-slate-500">
+            * 💡 **실시간 동기화 지원**: PC에서 Ctrl+V 또는 시간 수정 시 모바일/타 기기에 실시간 반영됩니다. (10~990분 10단위)
+        </div>
+    </div>
+
+    <!-- Table Display Container -->
+    <div class="bg-white border border-slate-300 rounded-xl p-3 sm:p-5 shadow-sm space-y-3">
+        
+        <!-- Title & Overtime Reset Row -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+            <h2 id="tableTitle" class="text-base sm:text-lg font-black text-slate-900">
+                10월 8일(목) HUB 공정별 인원 배치표
+            </h2>
+            <button onclick="resetOvertimeOnly()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors shadow-sm">
+                ⏱️ 연장근무시간 초기화
+            </button>
+        </div>
+
+        <!-- Scrollable Table -->
+        <div class="table-scroll-container">
+            <table class="excel-table">
+                <thead>
+                    <tr class="header-bg">
+                        <th class="col-cat">구분</th>
+                        <th class="col-job">직종</th>
+                        <th colspan="2">8층 SIOC</th>
+                        <th colspan="2">6층 상온</th>
+                        <th colspan="2">3층 냉동</th>
+                        <th colspan="2">1층 냉장</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Report Output Section -->
+    <div class="bg-white border border-emerald-500/30 rounded-xl p-4 shadow-sm space-y-2">
+        <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-emerald-800 flex items-center gap-1.5">
+                📋 연장 내역 보고서
+            </h3>
+            <button onclick="copyReportText()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors">
+                📋 보고서 텍스트 복사
+            </button>
+        </div>
+        <textarea id="reportArea" class="w-full h-36 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono leading-relaxed text-slate-800 outline-none resize-none" readonly placeholder="'보고 텍스트 생성' 버튼을 누르면 연장시간이 등록된 명단이 생성됩니다..."></textarea>
+    </div>
+
+</div>
+
+<!-- Firebase Imports via ES Modules -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// Global Environment Resolution
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'hub-roster-app';
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+    ? JSON.parse(__firebase_config) 
+    : {
+        // Fallback placeholder config for local static host if initialized
+        apiKey: "AIzaSyDemoKeyOnlyForFallback123456",
+        authDomain: "demo-app.firebaseapp.com",
+        projectId: "demo-app",
+        storageBucket: "demo-app.appspot.com",
+        messagingSenderId: "123456789",
+        appId: "1:123456789:web:abcdef"
+    };
+
+// Layout Specification (Exact Row Mapping matching B14:L56)
+const layoutConfig = [
+    { cat: "직원", job: "분류", type: "normal", spanCat: 9, spanJob: 6 },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "지게차", type: "yellow", spanJob: 3 },
+    { cat: "", job: "", type: "yellow" },
+    { cat: "", job: "", type: "yellow" },
+
+    { cat: "풀타임", job: "분류", type: "normal", spanCat: 13, spanJob: 12 },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "지게차", type: "green", spanJob: 1 },
+
+    { cat: "파트타임", job: "분류", type: "normal", spanCat: 17, spanJob: 14 },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "지게차", type: "pink", spanJob: 3 },
+    { cat: "", job: "", type: "pink" },
+    { cat: "", job: "", type: "pink" },
+
+    { cat: "21시조", job: "지게차", type: "normal", spanCat: 4, spanJob: 1 },
+    { cat: "", job: "분류", type: "normal", spanJob: 3 },
+    { cat: "", job: "", type: "normal" },
+    { cat: "", job: "", type: "normal" }
+];
+
+const floorHeaders = [
+    "8층 SIOC", "8층 SIOC",
+    "6층 상온", "6층 상온",
+    "3층 냉동", "3층 냉동",
+    "1층 냉장", "1층 냉장"
+];
+
+let db = null;
+let docRef = null;
+let isRemoteUpdating = false;
+
+// Construct Base Table Structure
+function renderBaseTable() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+
+    layoutConfig.forEach((cfg, rIdx) => {
+        const tr = document.createElement('tr');
+
+        if (cfg.cat) {
+            const tdCat = document.createElement('td');
+            tdCat.textContent = cfg.cat;
+            tdCat.className = 'col-cat';
+            if (cfg.cat === '직원' || cfg.cat === '풀타임') tdCat.classList.add('bg-blue');
+            if (cfg.cat === '파트타임') tdCat.classList.add('bg-pink');
+            if (cfg.spanCat) tdCat.rowSpan = cfg.spanCat;
+            tr.appendChild(tdCat);
+        }
+
+        if (cfg.job) {
+            const tdJob = document.createElement('td');
+            tdJob.textContent = cfg.job;
+            tdJob.className = 'col-job';
+            if (cfg.spanJob) tdJob.rowSpan = cfg.spanJob;
+            tr.appendChild(tdJob);
+        }
+
+        for (let cIdx = 0; cIdx < 8; cIdx++) {
+            const td = document.createElement('td');
+            td.id = `cell-${rIdx}-${cIdx}`;
+            
+            if (cfg.type === 'yellow') td.className = 'bg-yellow';
+            else if (cfg.type === 'green') td.className = 'bg-green';
+            else if (cfg.type === 'pink') td.className = 'bg-pink';
+            else td.className = 'bg-light-yellow';
+
+            td.innerHTML = `<div class="person-cell" id="container-${rIdx}-${cIdx}"></div>`;
+            tr.appendChild(td);
+        }
+
+        tbody.appendChild(tr);
+    });
+}
+
+// Show Toast Alert
+function showToast(msg) {
+    const toast = document.getElementById('syncToast');
+    const msgEl = document.getElementById('syncMsg');
+    msgEl.textContent = msg;
+    toast.style.opacity = '1';
+    setTimeout(() => {
+        toast.style.opacity = '0';
+    }, 2000);
+}
+
+// Validate Time Input Number (10~990 in tens)
+window.validateTimeInput = function(input, rIdx, cIdx) {
+    let val = input.value.trim();
+    if (val === "") {
+        saveStateToFirebase();
+        return;
+    }
+
+    val = val.replace(/[^0-9]/g, '');
+    const num = parseInt(val, 10);
+
+    if (!isNaN(num) && num >= 10 && num <= 990 && num % 10 === 0) {
+        input.value = num;
+        saveStateToFirebase();
+    } else {
+        alert("시간은 10 단위로 최대 3자리(10, 20, ..., 990)까지 입력 가능합니다.");
+        input.value = "";
+        input.focus();
+    }
+};
+
+// Fill individual Cell Content
+function setCellData(rIdx, cIdx, nameVal, timeVal) {
+    const container = document.getElementById(`container-${rIdx}-${cIdx}`);
+    if (!container) return;
+
+    if (nameVal) {
+        container.innerHTML = `
+            <span class="person-name" id="name-${rIdx}-${cIdx}">${nameVal}</span>
+            <div class="time-input-container">
+                <input type="text" class="time-input" id="time-${rIdx}-${cIdx}" 
+                       maxlength="3" value="${timeVal || ''}" onblur="validateTimeInput(this, ${rIdx}, ${cIdx})">
+                <span class="unit-label">분</span>
+            </div>
+        `;
+    } else {
+        container.innerHTML = '';
+    }
+}
+
+// Save Full Table State to Firebase
+async function saveStateToFirebase() {
+    if (isRemoteUpdating || !docRef) return;
+
+    const gridState = [];
+    layoutConfig.forEach((cfg, rIdx) => {
+        const rowData = [];
+        for (let cIdx = 0; cIdx < 8; cIdx++) {
+            const nameEl = document.getElementById(`name-${rIdx}-${cIdx}`);
+            const timeEl = document.getElementById(`time-${rIdx}-${cIdx}`);
+            rowData.push({
+                name: nameEl ? nameEl.textContent.trim() : '',
+                time: timeEl ? timeEl.value.trim() : ''
+            });
+        }
+        gridState.push(rowData);
+    });
+
+    const dateVal = document.getElementById('dateSelect').value;
+
+    try {
+        await setDoc(docRef, {
+            gridState: gridState,
+            date: dateVal,
+            updatedAt: Date.now()
+        }, { merge: true });
+        showToast("실시간 저장 완료");
+    } catch (e) {
+        console.error("Firebase Sync Error:", e);
+    }
+}
+
+// TSV Parsing logic for Ctrl+V
+function parseTSV(text) {
+    const lines = [];
+    let curLine = [];
+    let curCell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+                curCell += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === '\t' && !inQuotes) {
+            curLine.push(curCell.trim());
+            curCell = '';
+        } else if ((char === '\r' || char === '\n') && !inQuotes) {
+            if (char === '\r' && nextChar === '\n') i++;
+            curLine.push(curCell.trim());
+            lines.push(curLine);
+            curLine = [];
+            curCell = '';
+        } else {
+            curCell += char;
+        }
+    }
+
+    if (curCell || curLine.length > 0) {
+        curLine.push(curCell.trim());
+        lines.push(curLine);
+    }
+
+    return lines;
+}
+
+function processPastedData(pastedText) {
+    if (!pastedText.trim()) return;
+
+    const parsedRows = parseTSV(pastedText);
+
+    let startIdx = 0;
+    if (parsedRows.length > 0 && (parsedRows[0].includes("구분") || parsedRows[0].includes("관리자"))) {
+        startIdx = parsedRows[0].includes("구분") ? 2 : 1;
+    }
+
+    let dataRowCounter = 0;
+
+    for (let r = startIdx; r < parsedRows.length; r++) {
+        if (dataRowCounter >= layoutConfig.length) break;
+
+        const rowData = parsedRows[r];
+        let actualCols = rowData;
+        if (rowData.length >= 11) {
+            actualCols = rowData.slice(3);
+        }
+
+        for (let c = 0; c < 8; c++) {
+            const cellValue = actualCols[c] || '';
+            
+            const timeMatch = cellValue.match(/(\d+)\s*분?/);
+            let timeVal = '';
+            let nameVal = cellValue;
+
+            if (timeMatch) {
+                const parsedNum = parseInt(timeMatch[1], 10);
+                if (parsedNum >= 10 && parsedNum <= 990 && parsedNum % 10 === 0) {
+                    timeVal = parsedNum;
+                }
+                nameVal = cellValue.replace(/(\d+)\s*분?/, '').trim();
+            }
+
+            setCellData(dataRowCounter, c, nameVal, timeVal);
+        }
+
+        dataRowCounter++;
+    }
+
+    saveStateToFirebase();
+}
+
+// Global Exported Window Functions
+window.generateReportText = function() {
+    const floorGroups = { "8층": [], "6층": [], "3층": [], "1층": [] };
+
+    layoutConfig.forEach((cfg, rIdx) => {
+        for (let cIdx = 0; cIdx < 8; cIdx++) {
+            const nameSpan = document.getElementById(`name-${rIdx}-${cIdx}`);
+            const timeInput = document.getElementById(`time-${rIdx}-${cIdx}`);
+
+            if (nameSpan && timeInput) {
+                const name = nameSpan.textContent.trim();
+                const timeStr = timeInput.value.trim();
+
+                if (name && timeStr) {
+                    const colHeader = floorHeaders[cIdx];
+                    let floorKey = "8층";
+                    if (colHeader.includes("6층")) floorKey = "6층";
+                    if (colHeader.includes("3층")) floorKey = "3층";
+                    if (colHeader.includes("1층")) floorKey = "1층";
+
+                    floorGroups[floorKey].push(`${name} ${timeStr}분`);
+                }
+            }
+        }
+    });
+
+    let reportLines = [];
+    Object.keys(floorGroups).forEach(floor => {
+        if (floorGroups[floor].length > 0) {
+            reportLines.push(`${floor} 연장 내역`);
+            floorGroups[floor].forEach(item => {
+                reportLines.push(item);
+            });
+            reportLines.push("");
+        }
+    });
+
+    const reportText = reportLines.join("\n").trim();
+    const reportArea = document.getElementById('reportArea');
+    reportArea.value = reportText || "연장 시간이 입력된 인원이 없습니다.";
+};
+
+window.copyReportText = function() {
+    const reportArea = document.getElementById('reportArea');
+    if (!reportArea.value.trim() || reportArea.value === "연장 시간이 입력된 인원이 없습니다.") {
+        alert("복사할 연장 내역이 없습니다.");
+        return;
+    }
+    
+    reportArea.select();
+    document.execCommand('copy');
+    alert("연장 내역 보고서가 클립보드에 복사되었습니다!");
+};
+
+window.resetOvertimeOnly = function() {
+    layoutConfig.forEach((cfg, rIdx) => {
+        for (let cIdx = 0; cIdx < 8; cIdx++) {
+            const timeInput = document.getElementById(`time-${rIdx}-${cIdx}`);
+            if (timeInput) {
+                timeInput.value = '';
+            }
+        }
+    });
+
+    document.getElementById('reportArea').value = '';
+    saveStateToFirebase();
+    showToast("연장시간 초기화 완료");
+};
+
+window.resetAllData = function() {
+    renderBaseTable();
+    document.getElementById('pasteBox').value = '';
+    document.getElementById('reportArea').value = '';
+    saveStateToFirebase();
+    showToast("전체 데이터 초기화 완료");
+};
+
+function updateDateTitle(dateString) {
+    if (!dateString) return;
+    const dateObj = new Date(dateString);
+    const month = dateObj.getMonth() + 1;
+    const day = dateObj.getDate();
+    
+    const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+    const weekDay = weekDays[dateObj.getDay()];
+
+    const titleEl = document.getElementById('tableTitle');
+    titleEl.textContent = `${month}월 ${day}일(${weekDay}) HUB 공정별 인원 배치표`;
+}
+
+// Initialize Firebase & Firestore Sync
+async function initFirebase() {
+    renderBaseTable();
+
+    try {
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        db = getFirestore(app);
+
+        // Rule 3: Authenticate before queries
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+            await signInAnonymously(auth);
+        }
+
+        // Rule 1: Public path structure
+        docRef = doc(db, 'artifacts', appId, 'public', 'data', 'rosterState', 'currentDoc');
+
+        // Rule 2: Simple document snapshot listener
+        onSnapshot(docRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                isRemoteUpdating = true;
+
+                if (data.date) {
+                    document.getElementById('dateSelect').value = data.date;
+                    updateDateTitle(data.date);
+                }
+
+                if (data.gridState && Array.isArray(data.gridState)) {
+                    data.gridState.forEach((row, rIdx) => {
+                        if (Array.isArray(row)) {
+                            row.forEach((cell, cIdx) => {
+                                setCellData(rIdx, cIdx, cell.name, cell.time);
+                            });
+                        }
+                    });
+                }
+                showToast("실시간 동기화 수신");
+                isRemoteUpdating = false;
+            }
+        }, (err) => {
+            console.error("Snapshot error:", err);
+            isRemoteUpdating = false;
+        });
+
+    } catch (err) {
+        console.warn("Firebase fallback mode:", err);
+    }
+}
+
+// Global Event Handlers
+document.getElementById('pasteBox').addEventListener('paste', (e) => {
+    setTimeout(() => {
+        processPastedData(e.target.value);
+    }, 50);
+});
+
+document.getElementById('dateSelect').addEventListener('change', (e) => {
+    updateDateTitle(e.target.value);
+    saveStateToFirebase();
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+    
+    document.getElementById('dateSelect').value = todayStr;
+    updateDateTitle(todayStr);
+
+    initFirebase();
+});
+</script>
+
+</body>
+</html>
